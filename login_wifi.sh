@@ -1,13 +1,28 @@
 #!/opt/homebrew/bin/bash
 
 # Fonksiyonları yükle
-source "$HOME/login_functions.sh"
+source "$HOME/captive-portal-manager/login_functions.sh"
 
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
 
-accounts=()          # boş array oluştur
-accounts+=("1234567890 tr dummyPassword")   # dummy hesap ekle
-accounts+=("0987654321 gb dummyPassword")   # başka dummy hesap
+Network_Name="Ankara Buyuksehir WiFi"
+
+# Captive portal URLs (customizable)
+CAPTIVE_PORTAL_LOGIN_URL="https://ankarabbld.wifiprofesyonel.com/api/portal/dynamic/authenticate"
+CAPTIVE_PORTAL_SUMMARY_URL="https://ankarabbld.wifiprofesyonel.com/api/portal/welcome/account-summary"
+CAPTIVE_PORTAL_USER_URL="https://ankarabbld.wifiprofesyonel.com/api/portal/generic/basic-session"
+CAPTIVE_PORTAL_LOGOUT_URL="https://ankarabbld.wifiprofesyonel.com/api/portal/welcome/logout"
+
+
+accounts=(
+  "5075778738 tr Feanor25"
+  "5300802708 tr Alpbora2708"
+  "620491898 nl riKjyv-3sacsi"
+  "7412984545 gb Feanor25"
+  "7577225734 gb Feanor25"
+  "7598328098 gb Feanor25"
+  "612776705 nl Feanor25"
+) #phone number - country code - password
 
 
 logged_in_user="unknown"
@@ -78,7 +93,7 @@ while true; do
 
               echo "Wifi acip baglanma deneniyor..."
               networksetup -setairportpower en0 on
-              networksetup -setairportnetwork en0 "Ankara Buyuksehir WiFi"
+              networksetup -setairportnetwork en0 "$Network_Name"
             fi
 
             sleep $interval_check

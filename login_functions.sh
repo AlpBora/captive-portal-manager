@@ -1,7 +1,7 @@
 #!/opt/homebrew/bin/bash
 
-COOKIE_FILE="$HOME/.wifi_cookie"
-LOGFILE="$HOME/internet-login.log"
+COOKIE_FILE="$HOME/captive-portal-manager/.wifi_cookie"
+LOGFILE="$HOME/captive-portal-manager/internet-login.log"
 cookie_file=""
 speedtest_download="-"
 
@@ -27,9 +27,9 @@ write_log() {
   local log_download="$4"
 
   if [[ "$log_status" == "online" ]]; then
-      echo "🌐 Kullanıcı: $log_user | İnternet: Aktif | 📶 Kalan: ${log_remaining} MB | ⬇️ Download: ${log_download} Mbit/s" > "$LOGFILE"
+      echo "🌐 User: $log_user | Internet: Online | 📶 Remaining: ${log_remaining} MB | ⬇️ Download: ${log_download} Mbit/s" > "$LOGFILE"
   else
-      echo "❌ İnternet: Kapalı | 📶 Kalan: — MB | ⬇️ Download: —" > "$LOGFILE"
+      echo "❌ Internet: Offline | 📶 Remaining: — MB | ⬇️ Download: —" > "$LOGFILE"
   fi
 }
 
@@ -39,7 +39,7 @@ get_user_info() {
   load_cookie
   if [[ -n "$cookie_file" && -f "$cookie_file" ]]; then
     local response
-    response=$(curl -s -b "$cookie_file" "https://ankarabbld.wifiprofesyonel.com/api/portal/generic/basic-session")
+    response=$(curl -s -b "$cookie_file" "$CAPTIVE_PORTAL_USER_URL")
     local username
     username=$(echo "$response" | jq -r '.username // "unknown"')
     echo "$username"
@@ -55,11 +55,11 @@ check_internet() {
 }
 
 get_quota() {
-  DATA_URL="https://ankarabbld.wifiprofesyonel.com/api/portal/welcome/account-summary"
+  
   local quota_resp
   load_cookie
   if [[ -n "$cookie_file" && -f "$cookie_file" ]]; then
-    quota_resp=$(curl -s -b "$cookie_file" "$DATA_URL")
+    quota_resp=$(curl -s -b "$cookie_file" "$CAPTIVE_PORTAL_SUMMARY_URL")
     echo "$quota_resp" | jq '.products[0].remainingQuota'
   else
     echo "null"
@@ -110,8 +110,7 @@ is_logged_in() {
     return 1  # Cookie yok, login değil
   fi
 
-  RESPONSE_CODE=$(curl -s -b "$cookie_file" -o /dev/null -w "%{http_code}" -X GET "https://ankarabbld.wifiprofesyonel.com/api/portal/welcome/account-summary")
-
+  RESPONSE_CODE=$(curl -s -b "$cookie_file" -o /dev/null -w "%{http_code}" -X GET "$CAPTIVE_PORTAL_SUMMARY_URL")
   if [ "$RESPONSE_CODE" = "200" ]; then
     return 0 # Login olmuş
   else
@@ -142,7 +141,7 @@ is_wifi_connected() {
 
 # Wi-Fi aç ve bağlan
 connect_wifi() {
-    local ssid="Ankara Buyuksehir WiFi"
+    local ssid="$Network_Name"
 
     # Wi-Fi kapalıysa aç
     if ! is_wifi_on; then
@@ -178,7 +177,6 @@ login() {
   local phone=$1
   local country=$2
   local password=$3
-  LOGIN_URL="https://ankarabbld.wifiprofesyonel.com/api/portal/dynamic/authenticate"
 
   JSON_PAYLOAD=$(printf '{"gsmNo":{"localGsmNo":"%s","gsmNoCountry":"%s"},"password":"%s"}' "$phone" "$country" "$password")
   
@@ -190,7 +188,7 @@ login() {
 
   cookie_file=$(mktemp)
 
-  RESPONSE_CODE=$(curl -s -c "$cookie_file" -w "%{http_code}" -o /dev/null -X POST "$LOGIN_URL" \
+  RESPONSE_CODE=$(curl -s -c "$cookie_file" -w "%{http_code}" -o /dev/null -X POST "$CAPTIVE_PORTAL_LOGIN_URL" \
     -H "Content-Type: application/json" \
     -d "$JSON_PAYLOAD")
   save_cookie
@@ -221,7 +219,7 @@ login() {
 
 logout() {
   load_cookie
-  RESPONSE_CODE=$(curl -s -o /dev/null -w "%{http_code}" -b "$cookie_file" -X GET "https://ankarabbld.wifiprofesyonel.com/api/portal/welcome/logout")
+  RESPONSE_CODE=$(curl -s -o /dev/null -w "%{http_code}" -b "$cookie_file" -X GET "$CAPTIVE_PORTAL_LOGOUT_URL")
   if [ "$RESPONSE_CODE" = "200" ]; then
     if [[ -n "$cookie_file" && -f "$cookie_file" ]]; then
       rm -f "$cookie_file"
