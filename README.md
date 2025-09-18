@@ -44,9 +44,9 @@ It integrates with **LaunchAgents** for persistent execution and uses **Hammersp
 
     https://github.com/Hammerspoon/hammerspoon.git
 
-5.	Create a symlink for Hammerspoon:
+5.	Copy lua file to Hammerspoon:
 
-        ln -s hammerspoon/init.lua ~/.hammerspoon/init.lua
+        cp -f hammerspoon/init.lua ~/.hammerspoon/init.lua
 
 6.	Quit and Restart Hammerspoon to apply changes
 
@@ -110,9 +110,9 @@ Check if the service is loaded and running:
 
 - Hammerspoon doesn’t load `init.lua`
 
-   Ensure the symlink points to the correct file and reload config
+   Ensure the correct file is coppied to .hammerspoon and reload config
 
-        ln -sf ~/captive-portal-manager/init.lua ~/.hammerspoon/init.lua
+        cp -f ~/captive-portal-manager/init.lua ~/.hammerspoon/init.lua
 
    Restart Hammerspoon after creating the symlink.
 
