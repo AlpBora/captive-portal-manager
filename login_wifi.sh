@@ -33,6 +33,7 @@ last_update_time=$now
 
 interval_check=5
 
+
 while true; do
   now=$(date +%s)
   
@@ -91,9 +92,7 @@ while true; do
               echo "Hiçbir hesapla internet açılmadı."
               echo " Wifi kapalı olabilir"
 
-              echo "Wifi acip baglanma deneniyor..."
-              networksetup -setairportpower en0 on
-              networksetup -setairportnetwork en0 "$Network_Name"
+              connect_wifi
             fi
 
             sleep $interval_check
