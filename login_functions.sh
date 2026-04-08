@@ -1,9 +1,18 @@
 #!/opt/homebrew/bin/bash
 
+Network_Name="Ankara Buyuksehir WiFi"
+
+# Captive portal URLs (customizable)
+CAPTIVE_PORTAL_LOGIN_URL="https://ankarabbld.wifiprofesyonel.com/api/portal/dynamic/authenticate"
+CAPTIVE_PORTAL_SUMMARY_URL="https://ankarabbld.wifiprofesyonel.com/api/portal/welcome/account-summary"
+CAPTIVE_PORTAL_USER_URL="https://ankarabbld.wifiprofesyonel.com/api/portal/generic/basic-session"
+CAPTIVE_PORTAL_LOGOUT_URL="https://ankarabbld.wifiprofesyonel.com/api/portal/welcome/logout"
+
 COOKIE_FILE="$HOME/captive-portal-manager/.wifi_cookie"
 LOGFILE="$HOME/captive-portal-manager/internet-login.log"
 cookie_file=""
 speedtest_download="-"
+quota_exhausted=()
 
 # for VPN
 APP1="X-VPN"
@@ -49,9 +58,26 @@ get_user_info() {
 }
 
 check_internet() {
-  curl -s --max-time 3 https://www.gstatic.com/generate_204 -o /dev/null && return 0
-  curl -s --max-time 3 http://10.3.128.1 -o /dev/null && return 0
-  return 1
+  curl -s --max-time 5 https://www.google.com >/dev/null
+}
+
+fail_count=0
+
+check_internet_stable() {
+  tries=0
+
+  while [ "$tries" -lt 3 ]; do
+    if check_internet; then
+      fail_count=0
+      return 0   # kesin VAR
+    fi
+
+    tries=$((tries + 1))
+    sleep 5
+  done
+
+  fail_count=$((fail_count + 1))
+  return 1       # kesin YOK
 }
 
 get_quota() {
@@ -64,6 +90,14 @@ get_quota() {
   else
     echo "null"
   fi
+}
+
+is_quota_exhausted() {
+    local phone="$1"
+    for q in "${quota_exhausted[@]}"; do
+        [[ "$q" == "$phone" ]] && return 0
+    done
+    return 1
 }
 
 do_speedtest() {
@@ -118,6 +152,12 @@ is_logged_in() {
   fi
 }
 
+
+handle_portal_popup() {
+  osascript -e 'tell application "Captive Network Assistant" to quit' 2>/dev/null
+}
+
+
 # Wi-Fi açık mı kontrol
 is_wifi_on() {
     local status
@@ -142,20 +182,21 @@ is_wifi_connected() {
 # Wi-Fi aç ve bağlan
 connect_wifi() {
     local ssid="$Network_Name"
-
+    
     # Wi-Fi kapalıysa aç
     if ! is_wifi_on; then
         echo "Wi-Fi kapalı, açılıyor..."
         networksetup -setairportpower en0 on
-        sleep 2  # Açılmasını bekle
+        sleep 2
     fi
 
     # Wi-Fi açık ama ağa bağlı değilse bağlan
     if ! is_wifi_connected; then
-        echo "Ağa, bağlanılıyor..."
+        echo "Ağa bağlanılıyor..."
         networksetup -setairportnetwork en0 "$ssid"
-        sleep 2  # Bağlanmasını bekle
+        sleep 2
     fi
+    
 }
 
 is_vpn_active() {
@@ -200,14 +241,10 @@ login() {
     echo "📶 Kalan kota: $remaining_quota MB"
     logged_in_user=$phone
     write_log "$logged_in_user" "online" "$remaining_quota" "-"
-    if ! [ $remaining_quota -eq 0 ]; then
-      do_speedtest
-      write_log "$logged_in_user" "online" "$remaining_quota" "$speedtest_download"
-    fi
-
+    
     return 0
   else
-    echo "Login başarısız! Kullanıcı: $phone Status code: $RESPONSE_CODE"
+  #Login başarısız!
     if [[ -n "$cookie_file" && -f "$cookie_file" ]]; then
       rm -f "$cookie_file"
     fi
@@ -229,13 +266,13 @@ logout() {
     echo "Logout yapıldı."
     return 0
   else
-    echo "Logout basarisiz! HTTP kodu: $RESPONSE_CODE"
+  #Logout basarisiz!
     return 1
   fi
 }
 
 tryTologin(){
-  between_accounts_delay=2
+  between_accounts_delay=5
   local accounts=("$@")  # array olarak al
 
   if is_vpn_active; then
@@ -249,47 +286,56 @@ tryTologin(){
   i=0
   fail=0
   while [ $i -lt ${#accounts[@]} ]; do
-    read -r phone country password <<< "${accounts[$i]}"
+    
+    set -- ${accounts[$i]}
+    phone=$1
+    country=$2
+    password=$3
+
+    if is_quota_exhausted "$phone"; then
+      i=$((i+1))
+      continue
+    fi
+
     if login "$phone" "$country" "$password"; then
-        sleep 2
+        
         remaining_quota=$(get_quota)
 
-        if (( remaining_quota == 0 )); then
+        if [ $remaining_quota -eq 0 ]; then
             echo "Kota dolu. Logout yapılıyor ve diğer hesaba geçiliyor."
             logout
-            i=$((i+1))  # Bir sonraki hesaba geç
+            quota_exhausted+=("$phone")
             continue
         fi
 
-        if check_internet; then
+        if check_internet_stable; then
             break  # İşlem başarılı, döngüden çık
         else
-            if ["$fail" -eq 1]; then
-              echo "Login başarılı ama internet yok, sonraki hesabi dene"
+            if [ "$fail" -eq 1 ]; then
+              echo "$phone Login başarılı ama internet yok, sonraki hesabi dene"
               fail=0
               logout 
               i=$((i+1)) # Bir sonraki hesaba geç
               continue
             else
-              echo "Login başarılı ama internet yok, hesabı tekrar dene"
-              fail=$((fail + 1))
+              echo "$phone Login başarılı ama internet yok, hesabı tekrar dene"
+              fail=1
               logout
               continue
             fi
         fi
     else
-        echo "Login başarısız! Kullanıcı: $phone Logout yapılıp tekrar deneniyor."
-        if logout; then
-          sleep 1
+        if [ "$fail" -eq 0 ]; then
+          echo "$phone Login olamadi, aynı hesap bir kez daha deneniyor"
+          fail=1
           continue
         else
-          echo " Wifi kapalı olabilir veya VPN bagli"
-
-          # demek ki wifi kapali
-          connect_wifi
-          break
+          echo "$phone İkinci deneme de tutmadı, sonraki hesaba geç"
+          fail=0
+          i=$((i+1))
+          continue
         fi
-    fi
+      fi
 
     sleep $between_accounts_delay
   done
