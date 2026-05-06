@@ -34,14 +34,13 @@ write_log() {
   local log_status="$2"
   local log_remaining="$3"
   local log_download="$4"
-
+  local log_ping="$5" 
   if [[ "$log_status" == "online" ]]; then
-      echo "🌐 User: $log_user | Internet: Online | 📶 Remaining: ${log_remaining} MB | ⬇️ Download: ${log_download} Mbit/s" > "$LOGFILE"
+      echo "🌐 User: $log_user | 📶 Kalan: ${log_remaining} MB | ⬇️ Hız: ${log_download} Mbit/s | 🏓 Ping: ${log_ping} " > "$LOGFILE"
   else
-      echo "❌ Internet: Offline | 📶 Remaining: — MB | ⬇️ Download: —" > "$LOGFILE"
+      echo "❌ Internet: Offline | 📶 Kalan: — MB | ⬇️ Hız: — | 🏓 Ping: —" > "$LOGFILE"
   fi
 }
-
 
 get_user_info() {
 
@@ -101,9 +100,10 @@ is_quota_exhausted() {
 }
 
 do_speedtest() {
-
   SPEEDTEST="/opt/homebrew/bin/speedtest-cli"
   speedtest_download="—"
+  speedtest_ping="—" 
+  
   if [ -x "$SPEEDTEST" ]; then
     local speedtest_output ping_value download_value upload_value
     speedtest_output=$("$SPEEDTEST" --simple 2>/dev/null)
@@ -111,17 +111,20 @@ do_speedtest() {
     download_value=$(echo "$speedtest_output" | grep -Eo "Download: [0-9.]+ Mbit/s" | awk '{print $2}')
     upload_value=$(echo "$speedtest_output" | grep -Eo "Upload: [0-9.]+ Mbit/s" | awk '{print $2}')
 
-    echo "🏓 Ping: ${ping_value:-—} ms" "$ping_value"
-    echo "⬇️  Download: ${download_value:-—} Mbit/s" "$download_value"
-    echo "⬆️  Upload: ${upload_value:-—} Mbit/s" "$upload_value"
+    echo "🏓 Ping: ${ping_value:-—} ms" 
+    echo "⬇️  Download: ${download_value:-—} Mbit/s" 
+    echo "⬆️  Upload: ${upload_value:-—} Mbit/s" 
   
     speedtest_download="${download_value:-—}"
+    speedtest_ping="${ping_value:-—}" 
   else
     speedtest_download="-"
+    speedtest_ping="-"
   fi
 }
 
-update(){
+update() {
+  local skip_speedtest=$1 
 
   if is_vpn_active; then
       echo "$(date): ⚠️ VPN bağlı."
@@ -130,13 +133,48 @@ update(){
 
   remaining_quota=$(get_quota)
   logged_in_user=$(get_user_info)
+  
   echo "$(date): 🌐 İnternet bağlantısı aktif."
   echo "Kullanıcı: $logged_in_user"
   echo "📶 Güncel kota: $remaining_quota MB"
-  do_speedtest
-  write_log "$logged_in_user" "online" "$remaining_quota" "$speedtest_download"
-  
+
+  local current_ping="—"
+  local quality_text=""
+
+  if [ "$skip_speedtest" != "--no-speedtest" ]; then
+    echo "🚀 Hiz ölçülüyor..."
+    do_speedtest 
+    current_ping="$speedtest_ping"
+    # Aktif hız testi yapıldığında kaliteyi hıza göre de yorumlayabilirsin
+  else
+    # TCP Ping ölçümü
+    current_ping=$(curl -o /dev/null -s -w "%{time_connect}\n" https://www.google.com | awk '{print int($1 * 1000)}')
+    
+    if [ -z "$current_ping" ] || [ "$current_ping" -eq 0 ]; then
+        current_ping="—"
+        quality_text="(Bağlantı Yok)"
+    elif [ "$current_ping" -lt 35 ]; then
+        quality_text="(Mükemmel)"
+    elif [ "$current_ping" -lt 75 ]; then
+        quality_text="(İyi)"
+    elif [ "$current_ping" -lt 150 ]; then
+        quality_text="(Orta)"
+    else
+        quality_text="(Kötü)"
+    fi
+    
+    # Hız ölçülmediği için hız kısmına "-" yazıyoruz
+    speedtest_download="—"
+     # Ekrana basarken ping'in yanına kaliteyi ekle
+    echo "🏓 Ping: ${current_ping} ms ($quality_text)"
+  fi
+
+
+  # Log yazarken kaliteyi PİNG kısmına dahil et
+  # Format: ... | ⬇️ Hız: — | 🏓 Ping: 29 ms (Mükemmel)
+  write_log "$logged_in_user" "online" "$remaining_quota" "$speedtest_download" "${current_ping} ms ${quality_text}"
 }
+
 
 is_logged_in() {
   load_cookie
@@ -240,7 +278,7 @@ login() {
     remaining_quota=$(get_quota)
     echo "📶 Kalan kota: $remaining_quota MB"
     logged_in_user=$phone
-    write_log "$logged_in_user" "online" "$remaining_quota" "-"
+    write_log "$logged_in_user" "online" "$remaining_quota" "-" "-"
     
     return 0
   else
@@ -281,7 +319,7 @@ tryTologin(){
   fi
 
   echo "$(date): ❌ İnternet bağlantısı koptu, login deneniyor..."
-  write_log "-" "offline" "—" "—"
+  write_log "-" "offline" "—" "—" "-"
 
   i=0
   fail=0
@@ -302,7 +340,7 @@ tryTologin(){
         remaining_quota=$(get_quota)
 
         if [ $remaining_quota -eq 0 ]; then
-            echo "Kota dolu. Logout yapılıyor ve diğer hesaba geçiliyor."
+            echo "⚠️ Kota dolu. Logout yapılıyor ve diğer hesaba geçiliyor."
             logout
             quota_exhausted+=("$phone")
             continue
@@ -312,13 +350,13 @@ tryTologin(){
             break  # İşlem başarılı, döngüden çık
         else
             if [ "$fail" -eq 1 ]; then
-              echo "$phone Login başarılı ama internet yok, sonraki hesabi dene"
+              echo "⚠️ $phone Login başarılı ama internet yok, sonraki hesabi dene"
               fail=0
               logout 
               i=$((i+1)) # Bir sonraki hesaba geç
               continue
             else
-              echo "$phone Login başarılı ama internet yok, hesabı tekrar dene"
+              echo "⚠️ $phone Login başarılı ama internet yok, hesabı tekrar dene"
               fail=1
               logout
               continue
@@ -326,11 +364,11 @@ tryTologin(){
         fi
     else
         if [ "$fail" -eq 0 ]; then
-          echo "$phone Login olamadi, aynı hesap bir kez daha deneniyor"
+          echo "❌ $phone Login olamadi, aynı hesap bir kez daha deneniyor"
           fail=1
           continue
         else
-          echo "$phone İkinci deneme de tutmadı, sonraki hesaba geç"
+          echo "❌ $phone İkinci deneme de tutmadı, sonraki hesaba geç"
           fail=0
           i=$((i+1))
           continue

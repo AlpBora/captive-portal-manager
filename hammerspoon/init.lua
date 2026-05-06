@@ -111,6 +111,10 @@ wifiMenu:setMenu({
         hs.execute('source $HOME/captive-portal-manager/login_functions.sh && update &')
         hs.notify.show("WiFi Status", "", "Log Updated")
     end },
+    { title = "Logout", fn = function()
+        hs.execute('source $HOME/captive-portal-manager/login_functions.sh && logout &')
+        hs.notify.show("Account Status", "", "Logout")
+    end },
     { title = "Terminal Log Output", fn = function()
     hs.execute('osascript -e \'tell application "Terminal" to do script "tail -f /tmp/login_wifi.log"\'') end },
     { title = "Stop Service", fn = function()
@@ -135,6 +139,50 @@ end },
     { title = "Clear Log", fn = function()
         hs.execute('rm /tmp/login_wifi.log')
         hs.notify.show("WiFi Log", "", "Log file cleared")
+    end },
+
+     { title = "Re-Launch Service", fn = function()
+
+        -- 1. LaunchAgent'ı unload et
+        hs.execute('launchctl unload ~/Library/LaunchAgents/com.captiveportal.manager.plist')
+        
+        -- 2. login_wifi.sh ve ilgili log komutlarını öldür
+        hs.execute([[
+            pkill -f '/Users/alpbora/captive-portal-manager/login_wifi.sh'
+            pkill -f 'tail -f /tmp/login_wifi.log'
+        ]])
+
+        hs.execute('rm /tmp/login_wifi.log')
+
+        hs.execute('launchctl load ~/Library/LaunchAgents/com.captiveportal.manager.plist')
+        hs.notify.show("WiFi Service", "", "Service Re-Launched")
+    end },
+
+    { title = "Start Transmission Daemon", fn = function()
+        -- Önce varsa kalıntıları temizle, sonra başlat ve 1 saniye bekle
+        local cmd = "export PATH=$PATH:/opt/homebrew/bin:/usr/local/bin; " ..
+                    "killall transmission-daemon 2>/dev/null; " .. 
+                    "sleep 1; " ..
+                    "nohup /bin/bash /Users/alpbora/start_transmission.sh > /dev/null 2>&1 &" ..
+                    "transmission-remote 127.0.0.1:9091 -t all --reannounce" ..
+                    "transmission-remote 127.0.0.1:9091 -t all --verify"
+        
+        hs.execute(cmd)
+        
+        hs.notify.show("Torrent Service", "", "Transmission Daemon Launched")
+    end },
+    
+    { title = "Stop Transmission Daemon", fn = function()
+        -- 1. Tüm ilgili süreçleri tek seferde temizleyen komut
+        -- transmission-daemon: Ana motor
+        -- sequential: Arka plandaki bekçi döngüsü
+        local cmd = "killall transmission-daemon 2>/dev/null; " ..
+                    "pkill -f 'sequential' 2>/dev/null; " ..
+                    "killall -9 transmission-remote 2>/dev/null"
+        
+        hs.execute(cmd)
+        
+        hs.notify.show("Torrent Service", "", "Transmission Daemon killed")
     end },
     { title = "Log file: " .. logPath, disabled = true }
 })

@@ -6,20 +6,21 @@ source "$HOME/captive-portal-manager/login_functions.sh"
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
 
 accounts=(
- "phone number - country code - password"
+
+   "phone number - country code - password"
 ) 
+
 
 
 logged_in_user="unknown"
 speedtest_download="—"
 success=0
-now=$(date +%s)
-last_update_time=$now
-hourly_update_time=$now
 interval_check=5
 attempts=0
 max_attempts=3
-
+now=$(date +%s)
+last_update_time=$((now - 1200)) # Zamanı 20 dakika geriye sararak başlat
+is_first_run=1 # İlk çalışma bayrağı
 
 while true; do
   now=$(date +%s)
@@ -29,14 +30,15 @@ while true; do
   # internet VAR
   
     if [ $(( now - last_update_time )) -ge 1200 ]; then
-      update
-      last_update_time=$now
-      check_internet_stable && internet_ready=1 || internet_ready=0
-    fi
 
-    if [ $(( now - hourly_update_time )) -ge 3660 ]; then
-      update
-      hourly_update_time=$now
+      if [ "$is_first_run" -eq 1 ]; then
+        update # İlk açılışta parametresiz çağır (Hız testi yapar)
+        is_first_run=0 
+      else
+        update "--no-speedtest" # Sonrakilerde sadece Ping atar
+      fi
+      
+      last_update_time=$(date +%s)
       check_internet_stable && internet_ready=1 || internet_ready=0
     fi
 
@@ -46,7 +48,7 @@ while true; do
       
     if ! is_wifi_connected ; then
         echo "$(date): ❌ İnternet bağlantısı yok, baglantı bekleniyor..."
-        write_log "-" "offline" "—" "—"
+        write_log "-" "offline" "—" "—" "—"
       
       while true; do
         connect_wifi
@@ -75,7 +77,7 @@ while true; do
     check_internet_stable && internet_ready=1 || internet_ready=0
 
     if [ "$internet_ready" -eq 1 ]; then
-      update
+      update "--no-speedtest"
       success=1
       continue
     fi
@@ -85,7 +87,7 @@ while true; do
     check_internet && internet_ready=1 || internet_ready=0
 
     if [ "$internet_ready" -eq 1 ]; then
-      update
+      update "--no-speedtest"
       success=1
       continue
     fi
@@ -93,16 +95,18 @@ while true; do
     echo "Hâlâ yok, login deneniyor..."
     handle_portal_popup
     tryTologin "${accounts[@]}"
+    sleep 3
 
     check_internet && internet_ready=1 || internet_ready=0
 
     if [ "$internet_ready" -eq 0 ]; then
       echo "Hiçbir hesapla internet açılmadı. Restart..."
       logout
-      sleep 8
+      sleep 3
       exit 1  
     else
-      update
+      update "--no-speedtest" 
+      success=1
     fi
     
   fi
