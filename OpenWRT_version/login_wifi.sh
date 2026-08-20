@@ -7,15 +7,6 @@ export PATH="/usr/bin:/bin:/usr/sbin:/sbin"
 
 accounts=(
  
-  "5075778738 tr Feanor25"
-  "5300802708 tr Alpbora2708"
-  "620491898 nl riKjyv-3sacsi"
-  "7412984545 gb Feanor25"
-  "7577225734 gb Feanor25"
-  "7598328098 gb Feanor25"
-  "612776705 nl Feanor25"
-  "5552361750 tr Ortunc@1"
-  "5426941737 tr Ortunc@1"
    #"phone number - country code - password"
 ) 
 
